@@ -2,10 +2,12 @@ package videostream
 
 import (
 	"crypto/rand"
+	"fmt"
 	"math/big"
 	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	"go_videostream/config"
@@ -13,8 +15,9 @@ import (
 )
 
 type VideoStreamModule struct {
-	cfg   *config.VideoStreamConfig
-	cache *memory.Cache
+	cfg       *config.VideoStreamConfig
+	cache     *memory.Cache
+	pathRegex *regexp.Regexp
 }
 
 func New() *VideoStreamModule {
@@ -29,6 +32,15 @@ func (m *VideoStreamModule) Init(cfg interface{}, ramCache interface{}) error {
 	m.cfg = cfg.(*config.VideoStreamConfig)
 	m.cache = ramCache.(*memory.Cache)
 
+	if strings.HasPrefix(m.cfg.Path, "~") {
+		pattern := strings.TrimSpace(strings.TrimPrefix(m.cfg.Path, "~"))
+		rx, err := regexp.Compile(pattern)
+		if err != nil {
+			return fmt.Errorf("invalid regex path for videostream: %w", err)
+		}
+		m.pathRegex = rx
+	}
+
 	if m.cfg.PreloadToRAM {
 		if err := m.cache.LoadFromDirectory(m.cfg.ChunksDir); err != nil {
 			return err
@@ -39,7 +51,17 @@ func (m *VideoStreamModule) Init(cfg interface{}, ramCache interface{}) error {
 }
 
 func (m *VideoStreamModule) RegisterRoutes(mux *http.ServeMux) {
-	mux.HandleFunc(m.cfg.Path, m.handleRequest)
+	if m.pathRegex != nil {
+		// При regex матчинге мы слушаем весь трафик (слэш)
+		// и отклоняем не совпавшее внутри handleRequest
+		mux.HandleFunc("/", m.handleRequest)
+	} else if strings.HasSuffix(m.cfg.Path, "/") {
+		// Стандартный префиксный матчинг
+		mux.HandleFunc(m.cfg.Path, m.handleRequest)
+	} else {
+		// Строгий матчинг одного пути
+		mux.HandleFunc(m.cfg.Path, m.handleRequest)
+	}
 }
 
 func (m *VideoStreamModule) Shutdown() error {
@@ -47,6 +69,15 @@ func (m *VideoStreamModule) Shutdown() error {
 }
 
 func (m *VideoStreamModule) handleRequest(w http.ResponseWriter, r *http.Request) {
+	if m.pathRegex != nil {
+		// Ищем совпадение либо по RequestURI (если важны параметры), либо по Path
+		// Nginx обычно матчит URIs, RequestURI содержит и параметры.
+		if !m.pathRegex.MatchString(r.URL.RequestURI()) {
+			http.Error(w, "Bad Request", http.StatusBadRequest)
+			return
+		}
+	}
+
 	for k, v := range m.cfg.Headers {
 		w.Header().Set(k, v)
 	}

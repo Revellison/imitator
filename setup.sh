@@ -11,7 +11,7 @@ GO_VERSION="1.25.4"
 
 # Внимание: Укажите здесь свой репозиторий в формате "user/repo",
 # откуда будут качаться релизы (например "vlessenc/go_videostream")
-GITHUB_REPO="Revellison/imitator"
+GITHUB_REPO="username/repository"
 # ==============================================================================
 
 # Проверка root-прав

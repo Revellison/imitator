@@ -15,7 +15,10 @@ enabled_modules:
 
 modules:
   videostream:
-    path: "/media/stream/part"          # Базовый роутинг (поддерживает и /part/)
+    # Поддержка регулярных выражений (как в nginx) если начинается с "~"
+    # Пример: "~ ^/media/stream/part" (любой путь, начинающийся так)
+    # Пример: "~ ^/media/stream/part/\?id=.*" (жесткая привязка к формату параметров)
+    path: "~ ^/media/stream/part"       # Поддержка гибкого роутинга
     chunks_dir: "/var/www/html/CHUNKS"  # Откуда брать исходники при старте
     preload_to_ram: true                # Если false - читать с диска (для тестов)
     delivery_mode: "sequential"          # варианты: random, sequential
