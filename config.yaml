@@ -1,0 +1,38 @@
+server:
+  listen: "127.0.0.1:8081"
+  read_timeout: 30s
+  write_timeout: 60s
+  max_header_bytes: 1048576
+
+logging:
+  level: "debug" # варианты: debug, info, warn, error
+  format: "json" # варианты: text, json
+
+# Список глобально активированных модулей
+enabled_modules:
+  - "videostream"
+  - "cache_warmer"
+
+modules:
+  videostream:
+    path: "/media/stream/part"          # Базовый роутинг (поддерживает и /part/)
+    chunks_dir: "/var/www/html/CHUNKS"  # Откуда брать исходники при старте
+    preload_to_ram: true                # Если false - читать с диска (для тестов)
+    delivery_mode: "sequential"          # варианты: random, sequential
+    seq_key: "id"                       # Ключ в URL (?id=5). Используется при sequential
+    fallback_mode: "random"             # Действие, если id не найден или пуст
+    headers:                             # Кастомные HTTP-заголовки ответа
+      Content-Type: "video/mp2t"
+      Cache-Control: "no-store, no-cache, must-revalidate, max-age=0"
+      Pragma: "no-cache"
+      Server: "nginx/1.24.0"            # Мимикрия под фронтенд
+
+  cache_warmer:
+    enabled_worker: true                # Запуск фонового прогревателя
+    interval_seconds: 45                # Пауза между итерациями прогрева
+    concurrency_limit: 2                # Максимум параллельных запросов за итерацию
+    local_proxy: "socks5://127.0.0.1:40000" # Локальный аутбаунд (например, WARP или Xray)
+    targets:                            # Что пинговать для симуляции трафика
+      - "https://example.com/media/stream/part?id=10"
+      - "https://example.com/media/stream/part?id=11"
+      - "https://example.com/media/stream/part?id=12"
